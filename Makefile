@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c23
 
-TARGET = build/executable
+TARGET = build/tt
 SOURCES = main.c
 
 $(TARGET): $(SOURCES)
