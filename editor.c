@@ -1,7 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 
 #include "editor.h"
@@ -22,20 +24,31 @@ void editor_row_insert_char(struct editor_row *row, int at, char c);
 void editor_insert_row(int at);
 void editor_delete_row(int at);
 void editor_row_delete_char(struct editor_row *row, int at);
+void editor_handle_resize(int signal);
 
 int cursor_row;
 int cursor_col;
 int preferred_col;
 struct editor_row *rows;
 size_t num_rows;
+int row_offset;
 
 int command_pending;
+
+volatile sig_atomic_t resized = 0;
 
 void editor_init(void) {
     command_pending = 0;
     cursor_row = 0;
+    row_offset = 0;
     cursor_col = 0;
     preferred_col = cursor_col;
+
+    struct sigaction action = {0};
+    action.sa_handler = editor_handle_resize;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    sigaction(SIGWINCH, &action, NULL);
 
     num_rows = 1;
     rows = malloc(sizeof(struct editor_row) * num_rows);
@@ -45,7 +58,22 @@ void editor_init(void) {
 
     while(1) {
         editor_refresh_screen();
-        char key = editor_read_key();
+
+        if(resized) {
+            resized = 0;
+            continue;
+        }
+
+        char key;
+        int result = editor_read_key(&key);
+
+        if(resized) {
+            resized = 0;
+            continue;
+        }
+
+        if(result == -1)
+            continue;
 
         switch(key) {
             case CTRL_P:
@@ -160,18 +188,29 @@ void editor_disable_raw_mode(void) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &settings);
 }
 
-char editor_read_key(void) {
-    char key;
-    read(STDIN_FILENO, &key, 1);
-    return key;
+int editor_read_key(char *key) {
+    return read(STDIN_FILENO, key, 1);
 }
 
 void editor_refresh_screen(void) {
     printf("\x1b[2J");    /* clear the screen */
-    printf("\x1b[H");    /* move to the top-left */
+    printf("\x1b[3J");    /* clear terminal scroll-back */
+    printf("\x1b[H");     /* move to the top-left */
+
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);    /* get terminal size */
+
+    if(cursor_row < row_offset)
+        row_offset = cursor_row;
+
+    if(cursor_row >= row_offset + window.ws_row - 1)
+        row_offset = cursor_row - (window.ws_row - 1) + 1;
+
     editor_draw_rows();
-    printf("\x1b[%d;%dH", cursor_row + 1, cursor_col + 1);
+
+    printf("\x1b[%d;%dH",
+        cursor_row - row_offset + 1,
+        cursor_col + 1
+    );
 
     fflush(stdout);
 }
@@ -179,14 +218,16 @@ void editor_refresh_screen(void) {
 void editor_clear_screen(void) {
     printf("\x1b[2J");    /* clear the screen */
     printf("\x1b[3J");    /* clear terminal scroll-back */
-    printf("\x1b[H");    /* move cursor to top-left */
+    printf("\x1b[H");     /* move to cursor to top-left */
     fflush(stdout);
 }
 
 void editor_draw_rows(void) {
-    for (int i = 0; i < window.ws_row; i++) {
-        if (i < num_rows)
-            printf("%s", rows[i].chars);
+    for(int i = 0; i < window.ws_row; i++) {
+        int file_row = i + row_offset;
+
+        if (file_row < num_rows)
+            printf("%s", rows[file_row].chars);
         else
             printf("~");
 
@@ -280,4 +321,9 @@ void editor_delete_row(int at) {
     }
 
     rows = new_rows;
+}
+
+void editor_handle_resize(int signal) {
+    (void)signal;
+    resized = 1;
 }

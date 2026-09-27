@@ -34,7 +34,7 @@ void editor_init(void);
 void editor_enable_raw_mode(void);
 void editor_disable_raw_mode(void);
 
-char editor_read_key(void);
+int editor_read_key(char *key);
 
 void editor_refresh_screen(void);
 void editor_clear_screen(void);
