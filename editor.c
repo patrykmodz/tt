@@ -19,6 +19,7 @@ struct editor_row {
 
 void editor_row_init(struct editor_row *row);
 void editor_row_insert_char(struct editor_row *row, int at, char c);
+void editor_insert_row(int at);
 
 int cursor_row;
 int cursor_col;
@@ -58,6 +59,13 @@ void editor_init(void) {
             case CTRL_F:
                 if (cursor_col < rows[cursor_row].size)
                     cursor_col++;
+                break;
+            case '\r':
+            case '\n':
+                editor_insert_row(num_rows);
+                num_rows++;
+                cursor_row++;
+                cursor_col = 0;
                 break;
         }
         if (key >= 32 && key <= 126) {
@@ -101,7 +109,10 @@ void editor_refresh_screen(void) {
 }
 
 void editor_clear_screen(void) {
-    
+    printf("\x1b[2J");    /* clear the screen */
+    printf("\x1b[3J");    /* clear terminal scroll-back */
+    printf("\x1b[H");    /* move cursor to top-left */
+    fflush(stdout);
 }
 
 void editor_draw_rows(void) {
@@ -152,4 +163,19 @@ void editor_row_insert_char(struct editor_row *row, int at, char c) {
     }
     row->chars[at] = c;
     row->size++;
+}
+
+void editor_insert_row(int at) {
+    struct editor_row *new_rows =
+        realloc(rows, (num_rows + 1) * sizeof(struct editor_row));
+
+    if (new_rows == NULL) {
+        /* allocation failed */
+        perror("realloc failed");
+        exit(1);
+    }
+
+    rows = new_rows;
+
+    editor_row_init(&rows[at]);
 }
