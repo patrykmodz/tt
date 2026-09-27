@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -10,37 +11,52 @@ struct termios settings;
 
 struct winsize window;
 
+struct editor_row {
+    char *chars;
+    size_t size;
+    size_t capacity;
+};
+
+void editor_row_init(struct editor_row *row);
+void editor_row_insert_char(struct editor_row *row, int at, char c);
+
 int cursor_row;
 int cursor_col;
+struct editor_row *rows;
+size_t num_rows;
 
 void editor_init(void) {
     cursor_row = 0;
     cursor_col = 0;
 
+    num_rows = 1;
+    rows = malloc(sizeof(struct editor_row) * num_rows);
+    editor_row_init(&rows[0]);
+
     editor_enable_raw_mode();
 
-    while (1) {
+    while(1) {
         editor_refresh_screen();
         char key = editor_read_key();
 
-        switch (key) {
+        switch(key) {
             case CTRL_P:
-                if (cursor_row > 0)
+                if(cursor_row > 0)
                     cursor_row--;
                 break;
 
             case CTRL_N:
-                if (cursor_row < window.ws_row - 1)
+                if(cursor_row < window.ws_row - 1)
                     cursor_row++;
                 break;
 
             case CTRL_B:
-                if (cursor_col > 0)
+                if(cursor_col > 0)
                     cursor_col--;
                 break;
 
             case CTRL_F:
-                if (cursor_col < window.ws_col - 1)
+                if(cursor_col < window.ws_col - 1)
                     cursor_col++;
                 break;
         }
@@ -86,9 +102,50 @@ void editor_clear_screen(void) {
 
 void editor_draw_rows(void) {
     for (int i = 0; i < window.ws_row; i++) {
-        printf("~");
+        if (i < num_rows)
+            printf("%s", rows[i].chars);
+        else
+            printf("~");
 
         if (i < window.ws_row - 1)
             printf("\r\n");
     }
+}
+
+void editor_row_init(struct editor_row *row) {
+    row->size = 0;
+    row->capacity = 16;
+    row->chars = malloc(row->capacity);
+
+    if(row->chars == NULL) {
+        /* allocation failed */
+        perror("malloc failed");
+        exit(1);
+    }
+
+    row->chars[0] = '\0';
+}
+
+void editor_row_insert_char(struct editor_row *row, int at, char c) {
+    /* grow buffer */
+    if(row->size + 2 > row->capacity) { /* +2 for the new char + '\0' */
+        size_t new_capacity = row->capacity * 2;
+        char *new_chars = realloc(row->chars, new_capacity);
+
+        if(new_chars == NULL) {
+            /* allocation failed */
+            perror("realloc failed");
+            exit(1);
+        }
+
+        row->chars = new_chars;
+        row->capacity = new_capacity;
+    }
+
+    /* move everything from row->size backwards */
+    for (int i = row->size; i >= at; i--) {
+        row->chars[i + 1] = row->chars[i];
+    }
+    row->chars[at] = c;
+    row->size++;
 }
