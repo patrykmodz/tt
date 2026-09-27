@@ -50,25 +50,35 @@ void editor_init(void) {
                 if(cursor_row > 0)
                     cursor_row--;
                 break;
-
             case CTRL_N:
                 if (cursor_row < num_rows - 1)
                     cursor_row++;
                 break;
-
             case CTRL_B:
                 if(cursor_col > 0)
                     cursor_col--;
                 break;
-
             case CTRL_F:
                 if (cursor_col < rows[cursor_row].size)
                     cursor_col++;
                 break;
-            case '\r':
+            case '\r': /* enter */
             case '\n':
-                editor_insert_row(num_rows);
-                num_rows++;
+                editor_insert_row(cursor_row + 1);
+
+                /* move text after cursor into the new row */
+                for (int i = cursor_col; i < rows[cursor_row].size; i++) {
+                    editor_row_insert_char(
+                        &rows[cursor_row + 1],
+                        rows[cursor_row + 1].size,
+                        rows[cursor_row].chars[i]
+                    );
+                }
+
+                /* terminate the current row at the cursor */
+                rows[cursor_row].chars[cursor_col] = '\0';
+                rows[cursor_row].size = cursor_col;
+
                 cursor_row++;
                 cursor_col = 0;
                 break;
@@ -85,7 +95,6 @@ void editor_init(void) {
             case CTRL_X:
                 command_pending = 1;
                 break;
-
             case CTRL_C:
                 if (command_pending) {
                     editor_disable_raw_mode();
@@ -95,7 +104,7 @@ void editor_init(void) {
             case CTRL_G:
                 command_pending = 0;
                 break;
-}
+        }
         if (key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
@@ -205,7 +214,7 @@ void editor_insert_row(int at) {
     struct editor_row *new_rows =
         realloc(rows, (num_rows + 1) * sizeof(struct editor_row));
 
-    if (new_rows == NULL) {
+    if(new_rows == NULL) {
         /* allocation failed */
         perror("realloc failed");
         exit(1);
@@ -213,7 +222,13 @@ void editor_insert_row(int at) {
 
     rows = new_rows;
 
+    /* move rows after at one position forwards */
+    for(int i = num_rows; i > at; i--) {
+        rows[i] = rows[i - 1];
+    }
+
     editor_row_init(&rows[at]);
+    num_rows++;
 }
 
 void editor_delete_row(int at) {
