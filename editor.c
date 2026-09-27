@@ -67,7 +67,7 @@ void editor_init(void) {
                 editor_insert_row(cursor_row + 1);
 
                 /* move text after cursor into the new row */
-                for (int i = cursor_col; i < rows[cursor_row].size; i++) {
+                for(int i = cursor_col; i < rows[cursor_row].size; i++) {
                     editor_row_insert_char(
                         &rows[cursor_row + 1],
                         rows[cursor_row + 1].size,
@@ -81,6 +81,12 @@ void editor_init(void) {
 
                 cursor_row++;
                 cursor_col = 0;
+                break;
+            case '\t':
+                for(int i = 0; i < 4; i++) {
+                    editor_row_insert_char(&rows[cursor_row], cursor_col, ' ');
+                    cursor_col++;
+                }
                 break;
             case 127:  /* backspace */
                 if (cursor_col > 0) {
