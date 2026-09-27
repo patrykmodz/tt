@@ -15,7 +15,6 @@ int main(int argc, char* argv[]) {
         editor_init();
     }
 
-    editor_disable_raw_mode();
     return 0;
 }
 

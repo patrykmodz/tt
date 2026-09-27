@@ -26,7 +26,10 @@ int cursor_col;
 struct editor_row *rows;
 size_t num_rows;
 
+int command_pending;
+
 void editor_init(void) {
+    command_pending = 0;
     cursor_row = 0;
     cursor_col = 0;
 
@@ -67,7 +70,20 @@ void editor_init(void) {
                 cursor_row++;
                 cursor_col = 0;
                 break;
-        }
+            case CTRL_X:
+                command_pending = 1;
+                break;
+
+            case CTRL_C:
+                if (command_pending) {
+                    editor_disable_raw_mode();
+                    exit(0);
+                }
+                break;
+            case CTRL_G:
+                command_pending = 0;
+                break;
+}
         if (key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
@@ -79,7 +95,7 @@ void editor_init(void) {
 void editor_enable_raw_mode(void) {
     tcgetattr(STDIN_FILENO, &original_settings);
     settings = original_settings;
-    settings.c_lflag &= ~(ICANON | ECHO);
+    settings.c_lflag &= ~(ICANON | ECHO | ISIG);
     /* wait until at least one byte is available, then return immediately */
     settings.c_cc[VMIN] = 1;
     settings.c_cc[VTIME] = 0;
