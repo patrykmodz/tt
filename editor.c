@@ -25,6 +25,7 @@ void editor_row_delete_char(struct editor_row *row, int at);
 
 int cursor_row;
 int cursor_col;
+int preferred_col;
 struct editor_row *rows;
 size_t num_rows;
 
@@ -34,6 +35,7 @@ void editor_init(void) {
     command_pending = 0;
     cursor_row = 0;
     cursor_col = 0;
+    preferred_col = cursor_col;
 
     num_rows = 1;
     rows = malloc(sizeof(struct editor_row) * num_rows);
@@ -47,20 +49,38 @@ void editor_init(void) {
 
         switch(key) {
             case CTRL_P:
-                if(cursor_row > 0)
+                if(cursor_row > 0) {
                     cursor_row--;
+
+                    if(preferred_col > rows[cursor_row].size) {
+                        cursor_col = rows[cursor_row].size;
+                    } else {
+                        cursor_col = preferred_col;
+                    }
+                }
                 break;
             case CTRL_N:
-                if (cursor_row < num_rows - 1)
+                if(cursor_row < num_rows - 1) {
                     cursor_row++;
+
+                    if(preferred_col > rows[cursor_row].size) {
+                        cursor_col = rows[cursor_row].size;
+                    } else {
+                        cursor_col = preferred_col;
+                    }
+                }
                 break;
             case CTRL_B:
-                if(cursor_col > 0)
+                if(cursor_col > 0) {
                     cursor_col--;
+                    preferred_col = cursor_col;
+                }
                 break;
             case CTRL_F:
-                if (cursor_col < rows[cursor_row].size)
+                if(cursor_col < rows[cursor_row].size) {
                     cursor_col++;
+                    preferred_col = cursor_col;
+                }
                 break;
             case '\r': /* enter */
             case '\n':
@@ -81,28 +101,33 @@ void editor_init(void) {
 
                 cursor_row++;
                 cursor_col = 0;
+                preferred_col = 0;
                 break;
             case '\t':
                 for(int i = 0; i < 4; i++) {
                     editor_row_insert_char(&rows[cursor_row], cursor_col, ' ');
                     cursor_col++;
                 }
+
+                preferred_col = cursor_col;
                 break;
             case 127:  /* backspace */
-                if (cursor_col > 0) {
+                if(cursor_col > 0) {
                     cursor_col--;
+                    preferred_col = cursor_col;
                     editor_row_delete_char(&rows[cursor_row], cursor_col);
-                } else if (cursor_row > 0) {
+                } else if(cursor_row > 0) {
                     editor_delete_row(cursor_row);
                     cursor_row--;
                     cursor_col = rows[cursor_row].size;
+                    preferred_col = cursor_col;
                 }
                 break;
             case CTRL_X:
                 command_pending = 1;
                 break;
             case CTRL_C:
-                if (command_pending) {
+                if(command_pending) {
                     editor_disable_raw_mode();
                     exit(0);
                 }
@@ -111,7 +136,7 @@ void editor_init(void) {
                 command_pending = 0;
                 break;
         }
-        if (key >= 32 && key <= 126) {
+        if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
         }
