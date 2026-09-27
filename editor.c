@@ -46,7 +46,7 @@ void editor_init(void) {
                 break;
 
             case CTRL_N:
-                if(cursor_row < window.ws_row - 1)
+                if (cursor_row < num_rows - 1)
                     cursor_row++;
                 break;
 
@@ -56,9 +56,13 @@ void editor_init(void) {
                 break;
 
             case CTRL_F:
-                if(cursor_col < window.ws_col - 1)
+                if (cursor_col < rows[cursor_row].size)
                     cursor_col++;
                 break;
+        }
+        if (key >= 32 && key <= 126) {
+            editor_row_insert_char(&rows[cursor_row], cursor_col, key);
+            cursor_col++;
         }
     }
 }
