@@ -20,6 +20,8 @@ struct editor_row {
 void editor_row_init(struct editor_row *row);
 void editor_row_insert_char(struct editor_row *row, int at, char c);
 void editor_insert_row(int at);
+void editor_delete_row(int at);
+void editor_row_delete_char(struct editor_row *row, int at);
 
 int cursor_row;
 int cursor_col;
@@ -69,6 +71,16 @@ void editor_init(void) {
                 num_rows++;
                 cursor_row++;
                 cursor_col = 0;
+                break;
+            case 127:  /* backspace */
+                if (cursor_col > 0) {
+                    cursor_col--;
+                    editor_row_delete_char(&rows[cursor_row], cursor_col);
+                } else if (cursor_row > 0) {
+                    editor_delete_row(cursor_row);
+                    cursor_row--;
+                    cursor_col = rows[cursor_row].size;
+                }
                 break;
             case CTRL_X:
                 command_pending = 1;
@@ -181,6 +193,14 @@ void editor_row_insert_char(struct editor_row *row, int at, char c) {
     row->size++;
 }
 
+void editor_row_delete_char(struct editor_row *row, int at) {
+    /* move everything from row->size forwards */
+    for (int i = at; i < row->size; i++) {
+        row->chars[i] = row->chars[i + 1];
+    }
+    row->size--;
+}
+
 void editor_insert_row(int at) {
     struct editor_row *new_rows =
         realloc(rows, (num_rows + 1) * sizeof(struct editor_row));
@@ -194,4 +214,24 @@ void editor_insert_row(int at) {
     rows = new_rows;
 
     editor_row_init(&rows[at]);
+}
+
+void editor_delete_row(int at) {
+    /* move everything after at one position backwards */
+    for(int i = at; i < num_rows - 1; i++) {
+        rows[i] = rows[i + 1];
+    }
+
+    num_rows--;
+
+    struct editor_row *new_rows =
+        realloc(rows, num_rows * sizeof(struct editor_row));
+
+    if(new_rows == NULL && num_rows > 0) {
+        /* allocation failed */
+        perror("realloc failed");
+        exit(1);
+    }
+
+    rows = new_rows;
 }
