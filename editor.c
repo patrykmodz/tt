@@ -18,8 +18,33 @@ void editor_init(void) {
     cursor_col = 0;
 
     editor_enable_raw_mode();
-    editor_refresh_screen();
-    editor_read_key();
+
+    while (1) {
+        editor_refresh_screen();
+        char key = editor_read_key();
+
+        switch (key) {
+            case CTRL_P:
+                if (cursor_row > 0)
+                    cursor_row--;
+                break;
+
+            case CTRL_N:
+                if (cursor_row < window.ws_row - 1)
+                    cursor_row++;
+                break;
+
+            case CTRL_B:
+                if (cursor_col > 0)
+                    cursor_col--;
+                break;
+
+            case CTRL_F:
+                if (cursor_col < window.ws_col - 1)
+                    cursor_col++;
+                break;
+        }
+    }
 }
 
 /* turn off canonical input and echo */
