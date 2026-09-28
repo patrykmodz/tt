@@ -29,7 +29,14 @@
 #define CTRL_Y 0x19
 #define CTRL_Z 0x1A
 
+struct editor_row {
+    char *chars;
+    size_t size;
+    size_t capacity;
+};
+
 void editor_init(void);
+void editor_run(void);
 
 void editor_enable_raw_mode(void);
 void editor_disable_raw_mode(void);
@@ -42,5 +49,11 @@ void editor_row_insert_char(struct editor_row *row, int at, char c);
 void editor_refresh_screen(void);
 void editor_clear_screen(void);
 void editor_draw_rows(void);
+
+extern struct editor_row *rows;
+extern size_t num_rows;
+
+extern int cursor_row;
+extern int cursor_col;
 
 #endif

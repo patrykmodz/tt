@@ -13,15 +13,7 @@ struct termios settings;
 
 struct winsize window;
 
-struct editor_row {
-    char *chars;
-    size_t size;
-    size_t capacity;
-};
-
 void editor_row_init(struct editor_row *row);
-void editor_row_insert_char(struct editor_row *row, int at, char c);
-void editor_insert_row(int at);
 void editor_delete_row(int at);
 void editor_row_delete_char(struct editor_row *row, int at);
 void editor_handle_resize(int signal);
@@ -37,25 +29,7 @@ int command_pending;
 
 volatile sig_atomic_t resized = 0;
 
-void editor_init(void) {
-    command_pending = 0;
-    cursor_row = 0;
-    row_offset = 0;
-    cursor_col = 0;
-    preferred_col = cursor_col;
-
-    struct sigaction action = {0};
-    action.sa_handler = editor_handle_resize;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = 0;
-    sigaction(SIGWINCH, &action, NULL);
-
-    num_rows = 1;
-    rows = malloc(sizeof(struct editor_row) * num_rows);
-    editor_row_init(&rows[0]);
-
-    editor_enable_raw_mode();
-
+void editor_run(void) {
     while(1) {
         editor_refresh_screen();
 
@@ -157,6 +131,7 @@ void editor_init(void) {
             case CTRL_C:
                 if(command_pending) {
                     editor_disable_raw_mode();
+                    editor_clear_screen();
                     exit(0);
                 }
                 break;
@@ -169,6 +144,26 @@ void editor_init(void) {
             cursor_col++;
         }
     }
+}
+
+void editor_init(void) {
+    command_pending = 0;
+    cursor_row = 0;
+    row_offset = 0;
+    cursor_col = 0;
+    preferred_col = cursor_col;
+
+    struct sigaction action = {0};
+    action.sa_handler = editor_handle_resize;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    sigaction(SIGWINCH, &action, NULL);
+
+    num_rows = 1;
+    rows = malloc(sizeof(struct editor_row) * num_rows);
+    editor_row_init(&rows[0]);
+
+    editor_enable_raw_mode();
 }
 
 /* turn off canonical input and echo */
