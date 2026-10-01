@@ -1,66 +1,94 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 
 #include "editor.h"
+#include "file.h"
 
 struct termios original_settings;
 struct termios settings;
 
 struct winsize window;
 
-struct editor_row {
-    char *chars;
-    size_t size;
-    size_t capacity;
-};
-
 void editor_row_init(struct editor_row *row);
-void editor_row_insert_char(struct editor_row *row, int at, char c);
-void editor_insert_row(int at);
 void editor_delete_row(int at);
 void editor_row_delete_char(struct editor_row *row, int at);
+void editor_handle_resize(int signal);
 
 int cursor_row;
 int cursor_col;
+int preferred_col;
 struct editor_row *rows;
 size_t num_rows;
+int row_offset;
 
 int command_pending;
 
-void editor_init(void) {
-    command_pending = 0;
-    cursor_row = 0;
-    cursor_col = 0;
+volatile sig_atomic_t resized = 0;
 
-    num_rows = 1;
-    rows = malloc(sizeof(struct editor_row) * num_rows);
-    editor_row_init(&rows[0]);
 
-    editor_enable_raw_mode();
-
+/* TO DO:
+   improve CTRL_X command system;
+   make terminal not freeze when an invalid command is executed;
+   fix for now: CTRL_Q */
+void editor_run(void) {
     while(1) {
         editor_refresh_screen();
-        char key = editor_read_key();
+
+        if(resized) {
+            resized = 0;
+            continue;
+        }
+
+        char key;
+        int result = editor_read_key(&key);
+
+        if(resized) {
+            resized = 0;
+            continue;
+        }
+
+        if(result == -1)
+            continue;
 
         switch(key) {
             case CTRL_P:
-                if(cursor_row > 0)
+                if(cursor_row > 0) {
                     cursor_row--;
+
+                    if(preferred_col > rows[cursor_row].size) {
+                        cursor_col = rows[cursor_row].size;
+                    } else {
+                        cursor_col = preferred_col;
+                    }
+                }
                 break;
             case CTRL_N:
-                if (cursor_row < num_rows - 1)
+                if(cursor_row < num_rows - 1) {
                     cursor_row++;
+
+                    if(preferred_col > rows[cursor_row].size) {
+                        cursor_col = rows[cursor_row].size;
+                    } else {
+                        cursor_col = preferred_col;
+                    }
+                }
                 break;
             case CTRL_B:
-                if(cursor_col > 0)
+                if(cursor_col > 0) {
                     cursor_col--;
+                    preferred_col = cursor_col;
+                }
                 break;
             case CTRL_F:
-                if (cursor_col < rows[cursor_row].size)
+                if(cursor_col < rows[cursor_row].size) {
                     cursor_col++;
+                    preferred_col = cursor_col;
+                }
                 break;
             case '\r': /* enter */
             case '\n':
@@ -81,41 +109,72 @@ void editor_init(void) {
 
                 cursor_row++;
                 cursor_col = 0;
+                preferred_col = 0;
                 break;
             case '\t':
                 for(int i = 0; i < 4; i++) {
                     editor_row_insert_char(&rows[cursor_row], cursor_col, ' ');
                     cursor_col++;
                 }
+
+                preferred_col = cursor_col;
                 break;
             case 127:  /* backspace */
-                if (cursor_col > 0) {
+                if(cursor_col > 0) {
                     cursor_col--;
+                    preferred_col = cursor_col;
                     editor_row_delete_char(&rows[cursor_row], cursor_col);
-                } else if (cursor_row > 0) {
+                } else if(cursor_row > 0) {
                     editor_delete_row(cursor_row);
                     cursor_row--;
                     cursor_col = rows[cursor_row].size;
+                    preferred_col = cursor_col;
                 }
                 break;
             case CTRL_X:
                 command_pending = 1;
                 break;
             case CTRL_C:
-                if (command_pending) {
+                if(command_pending) {
                     editor_disable_raw_mode();
+                    editor_clear_screen();
                     exit(0);
                 }
                 break;
             case CTRL_G:
                 command_pending = 0;
                 break;
+        case CTRL_S:
+            if(command_pending) {
+                save_file(current_filename);
+                command_pending = 0;
+            }
         }
-        if (key >= 32 && key <= 126) {
+        if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
         }
     }
+}
+
+void editor_init(void) {
+    command_pending = 0;
+    cursor_row = 0;
+    row_offset = 0;
+    cursor_col = 0;
+    preferred_col = cursor_col;
+
+    struct sigaction action = {0};
+    action.sa_handler = editor_handle_resize;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    sigaction(SIGWINCH, &action, NULL);
+
+    num_rows = 1;
+    rows = malloc(sizeof(struct editor_row) * num_rows);
+    editor_row_init(&rows[0]);
+
+    editor_enable_raw_mode();
 }
 
 /* turn off canonical input and echo */
@@ -123,6 +182,7 @@ void editor_enable_raw_mode(void) {
     tcgetattr(STDIN_FILENO, &original_settings);
     settings = original_settings;
     settings.c_lflag &= ~(ICANON | ECHO | ISIG);
+    settings.c_iflag &= ~(IXON | IXOFF);
     /* wait until at least one byte is available, then return immediately */
     settings.c_cc[VMIN] = 1;
     settings.c_cc[VTIME] = 0;
@@ -135,18 +195,29 @@ void editor_disable_raw_mode(void) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &settings);
 }
 
-char editor_read_key(void) {
-    char key;
-    read(STDIN_FILENO, &key, 1);
-    return key;
+int editor_read_key(char *key) {
+    return read(STDIN_FILENO, key, 1);
 }
 
 void editor_refresh_screen(void) {
     printf("\x1b[2J");    /* clear the screen */
-    printf("\x1b[H");    /* move to the top-left */
+    printf("\x1b[3J");    /* clear terminal scroll-back */
+    printf("\x1b[H");     /* move to the top-left */
+
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);    /* get terminal size */
+
+    if(cursor_row < row_offset)
+        row_offset = cursor_row;
+
+    if(cursor_row >= row_offset + window.ws_row - 1)
+        row_offset = cursor_row - (window.ws_row - 1) + 1;
+
     editor_draw_rows();
-    printf("\x1b[%d;%dH", cursor_row + 1, cursor_col + 1);
+
+    printf("\x1b[%d;%dH",
+        cursor_row - row_offset + 1,
+        cursor_col + 1
+    );
 
     fflush(stdout);
 }
@@ -154,14 +225,16 @@ void editor_refresh_screen(void) {
 void editor_clear_screen(void) {
     printf("\x1b[2J");    /* clear the screen */
     printf("\x1b[3J");    /* clear terminal scroll-back */
-    printf("\x1b[H");    /* move cursor to top-left */
+    printf("\x1b[H");     /* move to cursor to top-left */
     fflush(stdout);
 }
 
 void editor_draw_rows(void) {
-    for (int i = 0; i < window.ws_row; i++) {
-        if (i < num_rows)
-            printf("%s", rows[i].chars);
+    for(int i = 0; i < window.ws_row; i++) {
+        int file_row = i + row_offset;
+
+        if (file_row < num_rows)
+            printf("%s", rows[file_row].chars);
         else
             printf("~");
 
@@ -255,4 +328,9 @@ void editor_delete_row(int at) {
     }
 
     rows = new_rows;
+}
+
+void editor_handle_resize(int signal) {
+    (void)signal;
+    resized = 1;
 }

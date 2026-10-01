@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c23
 
 TARGET = build/tt
-SOURCES = main.c editor.c
+SOURCES = main.c editor.c file.c
 
 $(TARGET): $(SOURCES)
 	mkdir -p build
