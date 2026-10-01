@@ -5,8 +5,12 @@
 #include "editor.h"
 #include "file.h"
 
+const char *current_filename = NULL; /* gets the compiler to shut the fuck up */
+
 int open_file(const char *filename) {
     FILE *file = fopen(filename, "r");
+    
+    current_filename = filename;
 
     if(file==NULL) {
         /* will eventually be buffer */
@@ -30,4 +34,21 @@ int open_file(const char *filename) {
     cursor_row = 0;
     cursor_col = 0;
     fclose(file);
+}
+
+int save_file(const char *filename) {
+    FILE *file = fopen(filename, "w");
+
+    if(file == NULL) {
+        perror(filename);
+        return -1;
+    }
+
+    for(int i = 0; i < num_rows; i++) {
+        fwrite(rows[i].chars, 1, rows[i].size, file);
+        fputc('\n', file);
+    }
+
+    fclose(file);
+    return 0;
 }

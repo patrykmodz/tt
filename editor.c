@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 
 #include "editor.h"
+#include "file.h"
 
 struct termios original_settings;
 struct termios settings;
@@ -29,6 +30,11 @@ int command_pending;
 
 volatile sig_atomic_t resized = 0;
 
+
+/* TO DO:
+   improve CTRL_X command system;
+   make terminal not freeze when an invalid command is executed;
+   fix for now: CTRL_Q */
 void editor_run(void) {
     while(1) {
         editor_refresh_screen();
@@ -138,6 +144,11 @@ void editor_run(void) {
             case CTRL_G:
                 command_pending = 0;
                 break;
+        case CTRL_S:
+            if(command_pending) {
+                save_file(current_filename);
+                command_pending = 0;
+            }
         }
         if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
@@ -171,6 +182,7 @@ void editor_enable_raw_mode(void) {
     tcgetattr(STDIN_FILENO, &original_settings);
     settings = original_settings;
     settings.c_lflag &= ~(ICANON | ECHO | ISIG);
+    settings.c_iflag &= ~(IXON | IXOFF);
     /* wait until at least one byte is available, then return immediately */
     settings.c_cc[VMIN] = 1;
     settings.c_cc[VTIME] = 0;
