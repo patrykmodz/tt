@@ -16,8 +16,6 @@ struct termios settings;
 
 struct winsize window;
 
-void editor_row_init(struct editor_row *row);
-void editor_delete_row(int at);
 void editor_row_delete_char(struct editor_row *row, int at);
 void editor_handle_resize(int signal);
 

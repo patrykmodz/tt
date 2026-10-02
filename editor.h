@@ -50,6 +50,9 @@ void editor_refresh_screen(void);
 void editor_clear_screen(void);
 void editor_draw_rows(void);
 
+void editor_row_init(struct editor_row *row);
+void editor_delete_row(int at);
+
 void editor_update_saved_state(void);
 
 extern struct editor_row *rows;
