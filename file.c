@@ -30,6 +30,14 @@ int open_file(const char *filename) {
         }
         row++;
     }
+
+    /* if file empty - give empty line back */
+    if(num_rows == 0) {
+        num_rows = 1;
+        rows = malloc(sizeof(struct editor_row));
+        editor_row_init(&rows[0]);
+    }
+
     /* reset cursor positions */
     cursor_row = 0;
     cursor_col = 0;
