@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <string.h>
 #include "prompt.h"
 
 void buffer_add_char(char key);
 void buffer_init(void);
 void get_terminal_dimension(void);
 void prompt_draw(const char *message);
+char *prompt_parse(char *input);
 
 static char *prompt_buffer;
 static size_t prompt_size;
@@ -15,7 +17,6 @@ static size_t prompt_capacity;
 static struct winsize window;
 
 char *prompt_run(const char *message) {
-    (void)message;
     get_terminal_dimension();
     buffer_init();
     prompt_draw(message);
@@ -25,8 +26,10 @@ char *prompt_run(const char *message) {
         /* read input */
         if(key >= 32 && key <= 126) {
             if(prompt_size < prompt_capacity - 1) {
-                buffer_add_char(key);
-                prompt_draw(message);
+                if(prompt_size + strlen(message) < window.ws_col) {
+                    buffer_add_char(key);
+                    prompt_draw(message);
+                }
             }
         }
         /* read enter */
@@ -35,7 +38,7 @@ char *prompt_run(const char *message) {
         }
         /* backspace */
         if(key == 127) {
-            if(key == 127 && prompt_size > 0) {
+            if(prompt_size > 0) {
                 prompt_size--;
                 prompt_buffer[prompt_size] = '\0';
                 prompt_draw(message);
@@ -66,4 +69,17 @@ void prompt_draw(const char *message) {
     printf("\x1b[2K"); /* clear row */
     printf("%s%s", message, prompt_buffer); /* print prompt */
     fflush(stdout);
+}
+
+char *prompt(const char *message) { /* middleman */
+    char *input = prompt_run(message);
+    return prompt_parse(input);
+}
+
+char *prompt_parse(char *input) {
+    if(input[0] == '\0') {
+        return NULL;
+    }
+
+    return input;
 }
