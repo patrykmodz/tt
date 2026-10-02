@@ -9,14 +9,14 @@ const char *current_filename = NULL; /* gets the compiler to shut the fuck up */
 
 int open_file(const char *filename) {
     FILE *file = fopen(filename, "r");
-    
-    current_filename = filename;
 
     if(file==NULL) {
-        /* will eventually be buffer */
         perror(filename);
         return -1;
     }
+
+    current_filename = filename;
+    editor_delete_row(0); /* eliminates random extra row on open */
 
     char buffer[1024];
     int row = 0;
@@ -30,6 +30,14 @@ int open_file(const char *filename) {
         }
         row++;
     }
+
+    /* if file empty - give empty line back */
+    if(num_rows == 0) {
+        num_rows = 1;
+        rows = malloc(sizeof(struct editor_row));
+        editor_row_init(&rows[0]);
+    }
+
     /* reset cursor positions */
     cursor_row = 0;
     cursor_col = 0;
