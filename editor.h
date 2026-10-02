@@ -50,6 +50,8 @@ void editor_refresh_screen(void);
 void editor_clear_screen(void);
 void editor_draw_rows(void);
 
+void editor_update_saved_state(void);
+
 extern struct editor_row *rows;
 extern size_t num_rows;
 

@@ -33,6 +33,7 @@ int open_file(const char *filename) {
     /* reset cursor positions */
     cursor_row = 0;
     cursor_col = 0;
+    editor_update_saved_state();
     fclose(file);
 }
 
