@@ -29,5 +29,5 @@ int main(int argc, char* argv[]) {
 }
 
 void usage() {
-    puts("USAGE:");
+    puts("usage: tt [filename]");
 }
