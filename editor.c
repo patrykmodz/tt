@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
@@ -8,6 +9,7 @@
 
 #include "editor.h"
 #include "file.h"
+#include "prompt.h"
 
 struct termios original_settings;
 struct termios settings;
@@ -28,13 +30,14 @@ int row_offset;
 
 int command_pending;
 
+static struct editor_row *saved_rows;
+static size_t saved_num_rows;
+static int editor_is_modified(void);
+static void editor_free_saved_state(void);
+
 volatile sig_atomic_t resized = 0;
 
 
-/* TO DO:
-   improve CTRL_X command system;
-   make terminal not freeze when an invalid command is executed;
-   fix for now: CTRL_Q */
 void editor_run(void) {
     while(1) {
         editor_refresh_screen();
@@ -134,21 +137,69 @@ void editor_run(void) {
             case CTRL_X:
                 command_pending = 1;
                 break;
+                /* exit */
             case CTRL_C:
                 if(command_pending) {
-                    editor_disable_raw_mode();
-                    editor_clear_screen();
-                    exit(0);
+                    if(editor_is_modified()) {
+                        char *input = prompt("save changes? (y/n): ");
+
+                        if(input != NULL && input[0] == 'y') {
+                            if(current_filename == NULL) {
+                                char *filename = prompt("save as: ");
+
+                                if(filename != NULL) {
+                                    current_filename = filename;
+
+                                    if(save_file(current_filename) == 0) {
+                                        editor_update_saved_state();
+                                        editor_disable_raw_mode();
+                                        editor_clear_screen();
+                                        return;
+                                    }
+                                }
+                            } else {
+                                if(save_file(current_filename) == 0) {
+                                    editor_update_saved_state();
+                                    editor_disable_raw_mode();
+                                    editor_clear_screen();
+                                    return;
+                                }
+                            }
+                        } else if(input != NULL && input[0] == 'n') {
+                            editor_disable_raw_mode();
+                            editor_clear_screen();
+                            return;
+                        }
+                    } else {
+                        editor_disable_raw_mode();
+                        editor_clear_screen();
+                        return;
+                    }
                 }
+                command_pending = 0;
                 break;
             case CTRL_G:
                 command_pending = 0;
                 break;
-        case CTRL_S:
-            if(command_pending) {
-                save_file(current_filename);
-                command_pending = 0;
-            }
+            /* save */
+            case CTRL_S:
+                if(command_pending) {
+                    if(current_filename == NULL) {
+                        char *input = prompt("save as: ");
+
+                        if(input != NULL) {
+                            current_filename = input;
+                            if(save_file(current_filename) == 0) {
+                                editor_update_saved_state();
+                            }
+                        }
+                    } else {
+                        if(save_file(current_filename) == 0) {
+                            editor_update_saved_state();
+                        }
+                    }
+                    command_pending = 0;
+                }
         }
         if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
@@ -174,6 +225,7 @@ void editor_init(void) {
     rows = malloc(sizeof(struct editor_row) * num_rows);
     editor_row_init(&rows[0]);
 
+    editor_update_saved_state();
     editor_enable_raw_mode();
 }
 
@@ -333,4 +385,69 @@ void editor_delete_row(int at) {
 void editor_handle_resize(int signal) {
     (void)signal;
     resized = 1;
+}
+
+static void editor_free_saved_state(void) {
+    for(size_t i = 0; i < saved_num_rows; i++) {
+        free(saved_rows[i].chars);
+    }
+
+    free(saved_rows);
+
+    saved_rows = NULL;
+    saved_num_rows = 0;
+}
+
+void editor_update_saved_state(void) {
+    editor_free_saved_state();
+
+    saved_num_rows = num_rows;
+
+    if(saved_num_rows == 0) {
+        saved_rows = NULL;
+        return;
+    }
+
+    saved_rows = malloc(sizeof(struct editor_row) * saved_num_rows);
+
+    if(saved_rows == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+
+    for(size_t i = 0; i < saved_num_rows; i++) {
+        saved_rows[i].size = rows[i].size;
+        saved_rows[i].capacity = rows[i].size + 1;
+
+        saved_rows[i].chars = malloc(saved_rows[i].capacity);
+
+        if(saved_rows[i].chars == NULL) {
+            perror("malloc");
+            exit(1);
+        }
+
+        memcpy(
+            saved_rows[i].chars,
+            rows[i].chars,
+            rows[i].size + 1
+        );
+    }
+}
+
+static int editor_is_modified(void) {
+    if(num_rows != saved_num_rows) {
+        return 1;
+    }
+
+    for(size_t i = 0; i < num_rows; i++) {
+        if(rows[i].size != saved_rows[i].size) {
+            return 1;
+        }
+
+        if(strcmp(rows[i].chars, saved_rows[i].chars) != 0) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
