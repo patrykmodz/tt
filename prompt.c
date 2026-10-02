@@ -3,7 +3,9 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string.h>
+
 #include "prompt.h"
+#define CTRL_G 7 /* avoid adding editor.h here */
 
 void buffer_add_char(char key);
 void buffer_init(void);
@@ -23,6 +25,14 @@ char *prompt_run(const char *message) {
     char key;
     while(1) {
         read(STDIN_FILENO, &key, 1);
+
+        /* check if cancelled */
+        if(key == CTRL_G) {
+            free(prompt_buffer);
+            prompt_buffer = NULL;
+            return NULL;
+        }
+
         /* read input */
         if(key >= 32 && key <= 126) {
             if(prompt_size < prompt_capacity - 1) {
@@ -77,7 +87,7 @@ char *prompt(const char *message) { /* middleman */
 }
 
 char *prompt_parse(char *input) {
-    if(input[0] == '\0') {
+    if(input == NULL || input[0] == '\0') {
         return NULL;
     }
 
