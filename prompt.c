@@ -62,6 +62,13 @@ void buffer_init() {
     prompt_size = 0;
     prompt_capacity = 4096;
     prompt_buffer = malloc(prompt_capacity);
+
+    if(prompt_buffer == NULL) {
+        perror("malloc");
+        exit(1);
+    }
+
+    prompt_buffer[0] = '\0';
 }
 
 void buffer_add_char(char key) {
