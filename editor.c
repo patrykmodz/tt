@@ -24,7 +24,9 @@ int cursor_col;
 int preferred_col;
 struct editor_row *rows;
 size_t num_rows;
+
 int row_offset;
+int col_offset;
 
 int command_pending;
 
@@ -210,6 +212,7 @@ void editor_init(void) {
     command_pending = 0;
     cursor_row = 0;
     row_offset = 0;
+    col_offset = 0;
     cursor_col = 0;
     preferred_col = cursor_col;
 
@@ -256,17 +259,25 @@ void editor_refresh_screen(void) {
 
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);    /* get terminal size */
 
+    /* vertical scrolling */
     if(cursor_row < row_offset)
         row_offset = cursor_row;
 
     if(cursor_row >= row_offset + window.ws_row - 1)
         row_offset = cursor_row - (window.ws_row - 1) + 1;
 
+    /* horizontal scrolling */
+    if(cursor_col < col_offset)
+        col_offset = cursor_col;
+
+    if(cursor_col >= col_offset + window.ws_col)
+        col_offset = cursor_col - window.ws_col + 1;
+
     editor_draw_rows();
 
     printf("\x1b[%d;%dH",
         cursor_row - row_offset + 1,
-        cursor_col + 1
+        cursor_col - col_offset +1
     );
 
     fflush(stdout);
@@ -283,12 +294,22 @@ void editor_draw_rows(void) {
     for(int i = 0; i < window.ws_row; i++) {
         int file_row = i + row_offset;
 
-        if (file_row < num_rows)
-            printf("%s", rows[file_row].chars);
-        else
-            printf("~");
+        if(file_row < num_rows) {
+            struct editor_row *row = &rows[file_row];
 
-        if (i < window.ws_row - 1)
+            if(col_offset < row->size) {
+                int visible = row->size - col_offset;
+
+                if(visible > window.ws_col)
+                    visible = window.ws_col;
+
+                printf("%.*s", visible, row->chars + col_offset);
+            }
+        } else {
+            printf("~");
+        }
+
+        if(i < window.ws_row - 1)
             printf("\r\n");
     }
 }
