@@ -260,18 +260,30 @@ void editor_refresh_screen(void) {
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);    /* get terminal size */
 
     /* vertical scrolling */
-    if(cursor_row < row_offset)
-        row_offset = cursor_row;
+    int v_margin = 8; /* 8 lines */
+    int visible_rows = window.ws_row - 1;
 
-    if(cursor_row >= row_offset + window.ws_row - 1)
-        row_offset = cursor_row - (window.ws_row - 1) + 1;
+    if(cursor_row < row_offset + v_margin)
+        row_offset = cursor_row - v_margin;
+
+    if(cursor_row >= row_offset + visible_rows - v_margin)
+        row_offset = cursor_row - visible_rows + v_margin + 1;
+
+    if(row_offset < 0)
+        row_offset = 0;
 
     /* horizontal scrolling */
-    if(cursor_col < col_offset)
-        col_offset = cursor_col;
+    int h_margin = 20; /* 20 chars */
+    int visible_cols = window.ws_col - 1;
 
-    if(cursor_col >= col_offset + window.ws_col)
-        col_offset = cursor_col - window.ws_col + 1;
+    if(cursor_col < col_offset + h_margin)
+        col_offset = cursor_col - h_margin;
+
+    if(cursor_col >= col_offset + visible_cols - h_margin)
+        col_offset = cursor_col - visible_cols + h_margin + 1;
+
+    if(col_offset < 0)
+        col_offset = 0;
 
     editor_draw_rows();
 
