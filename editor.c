@@ -24,7 +24,9 @@ int cursor_col;
 int preferred_col;
 struct editor_row *rows;
 size_t num_rows;
+
 int row_offset;
+int col_offset;
 
 int command_pending;
 
@@ -210,6 +212,7 @@ void editor_init(void) {
     command_pending = 0;
     cursor_row = 0;
     row_offset = 0;
+    col_offset = 0;
     cursor_col = 0;
     preferred_col = cursor_col;
 
@@ -256,17 +259,37 @@ void editor_refresh_screen(void) {
 
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);    /* get terminal size */
 
-    if(cursor_row < row_offset)
-        row_offset = cursor_row;
+    /* vertical scrolling */
+    int v_margin = 8; /* 8 lines */
+    int visible_rows = window.ws_row - 1;
 
-    if(cursor_row >= row_offset + window.ws_row - 1)
-        row_offset = cursor_row - (window.ws_row - 1) + 1;
+    if(cursor_row < row_offset + v_margin)
+        row_offset = cursor_row - v_margin;
+
+    if(cursor_row >= row_offset + visible_rows - v_margin)
+        row_offset = cursor_row - visible_rows + v_margin + 1;
+
+    if(row_offset < 0)
+        row_offset = 0;
+
+    /* horizontal scrolling */
+    int h_margin = 20; /* 20 chars */
+    int visible_cols = window.ws_col - 1;
+
+    if(cursor_col < col_offset + h_margin)
+        col_offset = cursor_col - h_margin;
+
+    if(cursor_col >= col_offset + visible_cols - h_margin)
+        col_offset = cursor_col - visible_cols + h_margin + 1;
+
+    if(col_offset < 0)
+        col_offset = 0;
 
     editor_draw_rows();
 
     printf("\x1b[%d;%dH",
         cursor_row - row_offset + 1,
-        cursor_col + 1
+        cursor_col - col_offset +1
     );
 
     fflush(stdout);
@@ -283,12 +306,22 @@ void editor_draw_rows(void) {
     for(int i = 0; i < window.ws_row; i++) {
         int file_row = i + row_offset;
 
-        if (file_row < num_rows)
-            printf("%s", rows[file_row].chars);
-        else
-            printf("~");
+        if(file_row < num_rows) {
+            struct editor_row *row = &rows[file_row];
 
-        if (i < window.ws_row - 1)
+            if(col_offset < row->size) {
+                int visible = row->size - col_offset;
+
+                if(visible > window.ws_col)
+                    visible = window.ws_col;
+
+                printf("%.*s", visible, row->chars + col_offset);
+            }
+        } else {
+            printf("~");
+        }
+
+        if(i < window.ws_row - 1)
             printf("\r\n");
     }
 }
