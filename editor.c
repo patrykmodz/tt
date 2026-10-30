@@ -142,23 +142,44 @@ void editor_run(void) {
                 if(command_pending) {
                     if(editor_is_modified()) {
                         char *input = prompt("save changes? (y/n): ");
-
                         if(input != NULL && input[0] == 'y') {
+                            char directory[4096];
+
                             if(current_filename == NULL) {
-                                char *filename = prompt("save as: ");
-
-                                if(filename != NULL) {
-                                    current_filename = filename;
-
-                                    if(save_file(current_filename) == 0) {
-                                        editor_update_saved_state();
-                                        editor_disable_raw_mode();
-                                        editor_clear_screen();
-                                        return;
-                                    }
+                                if(getcwd(directory, sizeof(directory)) == NULL) {
+                                    perror("getcwd");
+                                    break;
                                 }
                             } else {
-                                if(save_file(current_filename) == 0) {
+                                const char *slash = strrchr(current_filename, '/');
+
+                                if(slash == NULL) {
+                                    strcpy(directory, ".");
+                                } else if(slash == current_filename) {
+                                    strcpy(directory, "/");
+                                } else {
+                                    size_t length = slash - current_filename;
+
+                                    memcpy(directory, current_filename, length);
+                                    directory[length] = '\0';
+                                }
+                            }
+
+                            char message[8192];
+                            snprintf(message, sizeof(message), "save as: %s/", directory);
+
+                            char *filename = prompt(message);
+
+                            if(filename != NULL) {
+                                char full_path[8192];
+
+                                snprintf(full_path, sizeof(full_path), "%s%s%s",
+                                         directory,
+                                         strcmp(directory, "/") == 0 ? "" : "/",
+                                         filename);
+
+                                if(save_file(full_path) == 0) {
+                                    current_filename = strdup(full_path);
                                     editor_update_saved_state();
                                     editor_disable_raw_mode();
                                     editor_clear_screen();
@@ -184,23 +205,52 @@ void editor_run(void) {
             /* save */
             case CTRL_S:
                 if(command_pending) {
-                    if(current_filename == NULL) {
-                        char *input = prompt("save as: ");
+                    char directory[4096];
 
-                        if(input != NULL) {
-                            current_filename = input;
-                            if(save_file(current_filename) == 0) {
-                                editor_update_saved_state();
-                            }
+                    if(current_filename == NULL) {
+                        if(getcwd(directory, sizeof(directory)) == NULL) {
+                            perror("getcwd");
+                            command_pending = 0;
+                            break;
                         }
                     } else {
-                        if(save_file(current_filename) == 0) {
+                        const char *slash = strrchr(current_filename, '/');
+
+                        if(slash == NULL) {
+                            strcpy(directory, ".");
+                        } else if(slash == current_filename) {
+                            strcpy(directory, "/");
+                        } else {
+                            size_t length = slash - current_filename;
+                            memcpy(directory, current_filename, length);
+                            directory[length] = '\0';
+                        }
+                    }
+
+                    char message[8192];
+                    snprintf(message, sizeof(message), "save as: %s/", directory);
+
+                    char *input = prompt(message);
+
+                    if(input != NULL) {
+                        char full_path[8192];
+
+                        snprintf(full_path, sizeof(full_path), "%s%s%s",
+                                 directory,
+                                 strcmp(directory, "/") == 0 ? "" : "/",
+                                 input);
+
+                        if(save_file(full_path) == 0) {
+                            current_filename = strdup(full_path);
                             editor_update_saved_state();
                         }
                     }
+
                     command_pending = 0;
                 }
+                break;
         }
+
         if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
