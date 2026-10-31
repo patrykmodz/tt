@@ -38,17 +38,10 @@ struct editor_row {
 void editor_init(void);
 void editor_run(void);
 
-void editor_enable_raw_mode(void);
 void editor_disable_raw_mode(void);
-
-int editor_read_key(char *key);
 
 void editor_insert_row(int at);
 void editor_row_insert_char(struct editor_row *row, int at, char c);
-
-void editor_refresh_screen(void);
-void editor_clear_screen(void);
-void editor_draw_rows(void);
 
 void editor_row_init(struct editor_row *row);
 void editor_delete_row(int at);
