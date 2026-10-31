@@ -595,4 +595,9 @@ int bullshit(void) {
         free(full_path);
         return 0;
     }
+
+    editor_update_saved_state();
+
+    free(full_path);
+    return 1;
 }
