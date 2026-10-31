@@ -11,32 +11,28 @@
 #include "file.h"
 #include "prompt.h"
 
-struct termios original_settings;
 struct termios settings;
+struct termios original_settings;
 
 struct winsize window;
+volatile sig_atomic_t resized = 0;
 
 void editor_row_delete_char(struct editor_row *row, int at);
 void editor_handle_resize(int signal);
+static int editor_is_modified(void);
+static void editor_free_saved_state(void);
 
 int cursor_row;
 int cursor_col;
 int preferred_col;
-struct editor_row *rows;
 size_t num_rows;
-
 int row_offset;
 int col_offset;
-
 int command_pending;
 
+struct editor_row *rows;
 static struct editor_row *saved_rows;
 static size_t saved_num_rows;
-static int editor_is_modified(void);
-static void editor_free_saved_state(void);
-
-volatile sig_atomic_t resized = 0;
-
 
 void editor_run(void) {
     while(1) {
