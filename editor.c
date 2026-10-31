@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <signal.h>
+#include <limits.h>
 #include <sys/ioctl.h>
 
 #include "editor.h"
@@ -28,6 +29,20 @@ static void editor_handle_resize(int signal);
 static int editor_is_modified(void);
 static void editor_free_saved_state(void);
 
+/* key handling */
+static void handle_ctrl_p(void);
+static void handle_ctrl_n(void);
+static void handle_ctrl_f(void);
+static void handle_ctrl_b(void);
+static void handle_save(void);
+static void handle_enter(void);
+static void handle_tab(void);
+static void handle_backspace(void);
+static int handle_exit(void);
+static void pend(void);
+static void cancel_pend(void);
+static int bullshit(void); /* for the funsies */
+
 int cursor_row;
 int cursor_col;
 int preferred_col;
@@ -43,14 +58,13 @@ static size_t saved_num_rows;
 void editor_run(void) {
     while(1) {
         editor_refresh_screen();
-
         char key;
         int result = editor_read_key(&key);
+
         if(result == -1) {
             continue;
         }
 
-        
         if(resized) {
             resized = 0;
             continue;
@@ -58,197 +72,42 @@ void editor_run(void) {
 
         switch(key) {
             case CTRL_P:
-                if(cursor_row > 0) {
-                    cursor_row--;
-
-                    if(preferred_col > rows[cursor_row].size) {
-                        cursor_col = rows[cursor_row].size;
-                    } else {
-                        cursor_col = preferred_col;
-                    }
-                }
+                handle_ctrl_p();
                 break;
             case CTRL_N:
-                if(cursor_row < num_rows - 1) {
-                    cursor_row++;
-
-                    if(preferred_col > rows[cursor_row].size) {
-                        cursor_col = rows[cursor_row].size;
-                    } else {
-                        cursor_col = preferred_col;
-                    }
-                }
-                break;
-            case CTRL_B:
-                if(cursor_col > 0) {
-                    cursor_col--;
-                    preferred_col = cursor_col;
-                }
+                handle_ctrl_n();
                 break;
             case CTRL_F:
-                if(cursor_col < rows[cursor_row].size) {
-                    cursor_col++;
-                    preferred_col = cursor_col;
-                }
+                handle_ctrl_f();
                 break;
-            case '\r': /* enter */
+            case CTRL_B:
+                handle_ctrl_b();
+                break;
+            case '\r':
             case '\n':
-                editor_insert_row(cursor_row + 1);
-
-                /* move text after cursor into the new row */
-                for(int i = cursor_col; i < rows[cursor_row].size; i++) {
-                    editor_row_insert_char(
-                        &rows[cursor_row + 1],
-                        rows[cursor_row + 1].size,
-                        rows[cursor_row].chars[i]
-                    );
-                }
-
-                /* terminate the current row at the cursor */
-                rows[cursor_row].chars[cursor_col] = '\0';
-                rows[cursor_row].size = cursor_col;
-
-                cursor_row++;
-                cursor_col = 0;
-                preferred_col = 0;
+                handle_enter();
                 break;
             case '\t':
-                for(int i = 0; i < 4; i++) {
-                    editor_row_insert_char(&rows[cursor_row], cursor_col, ' ');
-                    cursor_col++;
-                }
-
-                preferred_col = cursor_col;
+                handle_tab();
                 break;
-            case 127:  /* backspace */
-                if(cursor_col > 0) {
-                    cursor_col--;
-                    preferred_col = cursor_col;
-                    editor_row_delete_char(&rows[cursor_row], cursor_col);
-                } else if(cursor_row > 0) {
-                    editor_delete_row(cursor_row);
-                    cursor_row--;
-                    cursor_col = rows[cursor_row].size;
-                    preferred_col = cursor_col;
-                }
+            case 127:
+                handle_backspace();
                 break;
             case CTRL_X:
-                command_pending = 1;
+                pend();
                 break;
-                /* exit */
             case CTRL_C:
-                if(command_pending) {
-                    if(editor_is_modified()) {
-                        char *input = prompt("save changes? (y/n): ");
-                        if(input != NULL && input[0] == 'y') {
-                            char directory[4096];
-
-                            if(current_filename == NULL) {
-                                if(getcwd(directory, sizeof(directory)) == NULL) {
-                                    perror("getcwd");
-                                    break;
-                                }
-                            } else {
-                                const char *slash = strrchr(current_filename, '/');
-
-                                if(slash == NULL) {
-                                    strcpy(directory, ".");
-                                } else if(slash == current_filename) {
-                                    strcpy(directory, "/");
-                                } else {
-                                    size_t length = slash - current_filename;
-
-                                    memcpy(directory, current_filename, length);
-                                    directory[length] = '\0';
-                                }
-                            }
-
-                            char message[8192];
-                            snprintf(message, sizeof(message), "save as: %s/", directory);
-
-                            char *filename = prompt(message);
-
-                            if(filename != NULL) {
-                                char full_path[8192];
-
-                                snprintf(full_path, sizeof(full_path), "%s%s%s",
-                                         directory,
-                                         strcmp(directory, "/") == 0 ? "" : "/",
-                                         filename);
-
-                                if(save_file(full_path) == 0) {
-                                    current_filename = strdup(full_path);
-                                    editor_update_saved_state();
-                                    editor_disable_raw_mode();
-                                    editor_clear_screen();
-                                    return;
-                                }
-                            }
-                        } else if(input != NULL && input[0] == 'n') {
-                            editor_disable_raw_mode();
-                            editor_clear_screen();
-                            return;
-                        }
-                    } else {
-                        editor_disable_raw_mode();
-                        editor_clear_screen();
-                        return;
-                    }
-                }
-                command_pending = 0;
+                if(handle_exit())
+                    return;
                 break;
             case CTRL_G:
-                command_pending = 0;
+                cancel_pend();
                 break;
-            /* save */
             case CTRL_S:
-                if(command_pending) {
-                    char directory[4096];
-
-                    if(current_filename == NULL) {
-                        if(getcwd(directory, sizeof(directory)) == NULL) {
-                            perror("getcwd");
-                            command_pending = 0;
-                            break;
-                        }
-                    } else {
-                        const char *slash = strrchr(current_filename, '/');
-
-                        if(slash == NULL) {
-                            strcpy(directory, ".");
-                        } else if(slash == current_filename) {
-                            strcpy(directory, "/");
-                        } else {
-                            size_t length = slash - current_filename;
-                            memcpy(directory, current_filename, length);
-                            directory[length] = '\0';
-                        }
-                    }
-
-                    char message[8192];
-                    snprintf(message, sizeof(message), "save as: %s/", directory);
-
-                    char *input = prompt(message);
-
-                    if(input != NULL) {
-                        char full_path[8192];
-
-                        snprintf(full_path, sizeof(full_path), "%s%s%s",
-                                 directory,
-                                 strcmp(directory, "/") == 0 ? "" : "/",
-                                 input);
-
-                        if(save_file(full_path) == 0) {
-                            current_filename = strdup(full_path);
-                            editor_update_saved_state();
-                        }
-                    }
-
-                    command_pending = 0;
-                }
+                handle_save();
                 break;
         }
-
+        /* typing */
         if(key >= 32 && key <= 126) {
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
@@ -466,7 +325,7 @@ void editor_handle_resize(int signal) {
     resized = 1;
 }
 
-static void editor_free_saved_state(void) {
+void editor_free_saved_state(void) {
     for(size_t i = 0; i < saved_num_rows; i++) {
         free(saved_rows[i].chars);
     }
@@ -513,7 +372,7 @@ void editor_update_saved_state(void) {
     }
 }
 
-static int editor_is_modified(void) {
+int editor_is_modified(void) {
     if(num_rows != saved_num_rows) {
         return 1;
     }
@@ -529,4 +388,211 @@ static int editor_is_modified(void) {
     }
 
     return 0;
+}
+
+/* key handling */
+void handle_ctrl_p(void) {
+    if(cursor_row > 0) {
+        cursor_row--;
+
+        if(preferred_col > rows[cursor_row].size) {
+            cursor_col = rows[cursor_row].size;
+        } else {
+            cursor_col = preferred_col;
+        }
+    }
+}
+
+void handle_ctrl_n(void) {
+    if(cursor_row < num_rows - 1) {
+        cursor_row++;
+
+        if(preferred_col > rows[cursor_row].size) {
+            cursor_col = rows[cursor_row].size;
+        } else {
+            cursor_col = preferred_col;
+        }
+    }
+}
+
+void handle_ctrl_f(void) {
+    if(cursor_col < rows[cursor_row].size) {
+        cursor_col++;
+        preferred_col = cursor_col;
+    }
+}
+
+void handle_ctrl_b(void) {
+    if(cursor_col > 0) {
+        cursor_col--;
+        preferred_col = cursor_col;
+    }
+}
+
+void handle_save(void) {
+    bullshit();
+}
+
+void handle_enter(void) {
+    editor_insert_row(cursor_row + 1);
+
+    /* move text after cursor into the new row */
+    for(int i = cursor_col; i < rows[cursor_row].size; i++) {
+        editor_row_insert_char(
+            &rows[cursor_row + 1],
+            rows[cursor_row + 1].size,
+            rows[cursor_row].chars[i]
+        );
+    }
+
+    /* terminate the current row at the cursor */
+    rows[cursor_row].chars[cursor_col] = '\0';
+    rows[cursor_row].size = cursor_col;
+
+    cursor_row++;
+    cursor_col = 0;
+    preferred_col = 0;
+}
+
+void handle_tab(void) {
+    int tab_amount = 4;
+    for(int i = 0; i < tab_amount; i++) {
+        editor_row_insert_char(&rows[cursor_row], cursor_col, ' ');
+        cursor_col++;
+    }
+
+    preferred_col = cursor_col;
+}
+
+void handle_backspace(void) {
+    if(cursor_col > 0) {
+        cursor_col--;
+        preferred_col = cursor_col;
+        editor_row_delete_char(&rows[cursor_row], cursor_col);
+    } else if(cursor_row > 0) {
+        editor_delete_row(cursor_row);
+        cursor_row--;
+        cursor_col = rows[cursor_row].size;
+        preferred_col = cursor_col;
+    }
+}
+
+static int handle_exit(void) {
+    if(!command_pending)
+        return 0;
+
+    if(!editor_is_modified()) {
+        editor_clear_screen();
+        editor_disable_raw_mode();
+        return 1;
+    }
+
+    char *input = prompt("save changes? (y/n): ");
+
+    if(!input)
+        return 0;
+
+    if(strcmp(input, "y") == 0) {
+        free(input);
+
+        if(!bullshit())
+            return 0;
+    } else if(strcmp(input, "n") == 0) {
+        free(input);
+    } else {
+        free(input);
+        return 0;
+    }
+
+    editor_clear_screen();
+    editor_disable_raw_mode();
+    return 1;
+}
+
+void pend(void) {
+    command_pending = 1;
+}
+
+void cancel_pend(void) {
+    command_pending = 0;
+}
+
+/* all bullshit is: saved_as_prompt its also slightly vibecoded hehe*/
+int bullshit(void) {
+    char cwd[PATH_MAX];
+    char *directory;
+    char *prompt_text;
+    char *filename;
+    char *full_path;
+
+    /* determine directory */
+    if(current_filename) {
+        char *slash = strrchr(current_filename, '/');
+
+        if(slash) {
+            size_t len = slash - current_filename;
+            directory = malloc(len + 1);
+            if(!directory)
+                return 0;
+
+            memcpy(directory, current_filename, len);
+            directory[len] = '\0';
+        } else {
+            directory = strdup(".");
+        }
+    } else {
+        if(!getcwd(cwd, sizeof(cwd)))
+            return 0;
+
+        directory = strdup(cwd);
+    }
+
+    if(!directory)
+        return 0;
+
+    /* ask for filename */
+    prompt_text = malloc(strlen(directory) + 12);
+    if(!prompt_text) {
+        free(directory);
+        return 0;
+    }
+
+    sprintf(prompt_text, "save as: %s/", directory);
+
+    filename = prompt(prompt_text);
+
+    free(prompt_text);
+
+    if(!filename || !filename[0]) {
+        free(filename);
+        free(directory);
+        return 0;
+    }
+
+    /* construct full path */
+    full_path = malloc(strlen(directory) + strlen(filename) + 2);
+    if(!full_path) {
+        free(filename);
+        free(directory);
+        return 0;
+    }
+
+    sprintf(full_path, "%s/%s", directory, filename);
+
+    free(filename);
+    free(directory);
+
+    /* save */
+    if(save_file(full_path) != 0) {
+        free(full_path);
+        return 0;
+    }
+
+    free(current_filename);
+    current_filename = strdup(full_path);
+
+    if(!current_filename) {
+        free(full_path);
+        return 0;
+    }
 }
