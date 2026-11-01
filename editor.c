@@ -109,6 +109,7 @@ void editor_run(void) {
         }
         /* typing */
         if(key >= 32 && key <= 126) {
+            cancel_pend(); /* cancel pend when typing normally into editor */
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
         }
