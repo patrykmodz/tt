@@ -169,7 +169,7 @@ void editor_refresh_screen(void) {
 
     /* vertical scrolling */
     int v_margin = 8; /* 8 lines */
-    int visible_rows = window.ws_row - 1;
+    int visible_rows = window.ws_row - 2;
 
     if(cursor_row < row_offset + v_margin)
         row_offset = cursor_row - v_margin;
@@ -211,7 +211,7 @@ void editor_clear_screen(void) {
 }
 
 void editor_draw_rows(void) {
-    for(int i = 0; i < window.ws_row; i++) {
+    for(int i = 0; i < window.ws_row-2; i++) {
         int file_row = i + row_offset;
 
         if(file_row < num_rows) {
@@ -229,7 +229,7 @@ void editor_draw_rows(void) {
             printf("~");
         }
 
-        if(i < window.ws_row - 1)
+        if(i < window.ws_row - 3)
             printf("\r\n");
     }
 }
