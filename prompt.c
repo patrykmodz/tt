@@ -1,17 +1,24 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string.h>
+#include <time.h>
 
 #include "prompt.h"
 #define CTRL_G 7 /* avoid adding editor.h here */
 
-void buffer_add_char(char key);
-void buffer_init(void);
-void get_terminal_dimension(void);
-void prompt_draw(const char *message);
-char *prompt_parse(char *input);
+static void buffer_add_char(char key);
+static void buffer_init(void);
+static void get_terminal_dimension(void);
+static char *prompt_parse(char *input);
+static void prompt_draw(const char *message);
+static char *prompt_run(const char *message);
+
+static char *prompt_message_text; /* owns a copy of the message */
+static struct timespec prompt_message_expiry; /* stores its expiration time */
+static int prompt_message_active; /* tells us whether there's a message to display */
 
 static char *prompt_buffer;
 static size_t prompt_size;
@@ -99,4 +106,63 @@ char *prompt_parse(char *input) {
     }
 
     return input;
+}
+
+void prompt_message(const char *message, int seconds) {
+    /* reject invalid arguments */
+    if(!message || seconds < 0) {
+        return;
+    }
+    /* get the current monotonic time */
+    struct timespec expiry;
+    if(clock_gettime(CLOCK_MONOTONIC, &expiry) == -1) {
+        return;
+    }
+    /* allocate a copy of the message */
+    char *new_message = strdup(message);
+    if(!new_message) {
+        return;
+    }
+    /* calculate when the message expires */
+    expiry.tv_sec += seconds;
+    /* replace the previous message */
+    free(prompt_message_text);
+    prompt_message_text = new_message;
+    /* store expiry time and activate the message */
+    prompt_message_expiry = expiry;
+    prompt_message_active = 1;
+}
+
+void prompt_refresh(void) {
+    /* nothing to display */
+    if(!prompt_message_active)
+        return;
+
+    /* get the current monotonic time */
+    struct timespec now;
+
+    if(clock_gettime(CLOCK_MONOTONIC, &now) == -1)
+        return;
+
+    /* check whether the message has expired */
+    if(now.tv_sec > prompt_message_expiry.tv_sec ||
+      (now.tv_sec == prompt_message_expiry.tv_sec &&
+       now.tv_nsec >= prompt_message_expiry.tv_nsec)) {
+
+        free(prompt_message_text);
+        prompt_message_text = NULL;
+        prompt_message_active = 0;
+
+        /* clear the prompt row */
+        get_terminal_dimension();
+        printf("\x1b[%d;1H", window.ws_row);
+        printf("\x1b[2K");
+        return;
+    }
+
+    /* draw the message on the bottom row */
+    get_terminal_dimension();
+    printf("\x1b[%d;1H", window.ws_row);
+    printf("\x1b[2K");
+    printf("%s", prompt_message_text);
 }

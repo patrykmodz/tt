@@ -194,6 +194,7 @@ void editor_refresh_screen(void) {
         col_offset = 0;
 
     editor_draw_rows();
+    prompt_refresh();
 
     printf("\x1b[%d;%dH",
         cursor_row - row_offset + 1,
