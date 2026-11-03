@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "statusbar.h"
+#include "file.h"
 
 static struct winsize window;
 
@@ -15,6 +16,12 @@ void statusbar_draw(void) {
     printf("\x1b[2K"); /* clears the entire current line using the current background colour */
 
     printf(" tt ");
+    printf("  "); /* space inbetween */
+    if(!current_filename) {
+        printf("[newfile]");
+    } else {
+        printf("%s", current_filename);
+    }
 
     printf("\x1b[K"); /* clears from the current cursor position to the end of the line
                          filling the remaining space with the white background. */
