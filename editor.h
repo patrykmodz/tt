@@ -48,6 +48,8 @@ void editor_delete_row(int at);
 
 void editor_update_saved_state(void);
 
+int editor_is_modified(void);
+
 extern struct editor_row *rows;
 extern size_t num_rows;
 

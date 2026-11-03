@@ -27,7 +27,6 @@ static void editor_draw_rows(void);
 
 static void editor_row_delete_char(struct editor_row *row, int at);
 static void editor_handle_resize(int signal);
-static int editor_is_modified(void);
 static void editor_free_saved_state(void);
 
 /* key handling */
