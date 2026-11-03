@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "statusbar.h"
+#include "editor.h"
 #include "file.h"
 
 static struct winsize window;
@@ -17,10 +18,17 @@ void statusbar_draw(void) {
 
     printf(" tt ");
     printf("  "); /* space inbetween */
+    /* display filename */
     if(!current_filename) {
         printf("[newfile]");
     } else {
         printf("%s", current_filename);
+    }
+    /* modified */
+    if(editor_is_modified()) {
+        printf(" [+]");
+    } else {
+        printf(" "); /* just print a space */
     }
 
     printf("\x1b[K"); /* clears from the current cursor position to the end of the line
