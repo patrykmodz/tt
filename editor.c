@@ -42,6 +42,7 @@ static int handle_exit(void);
 static void pend(void);
 static void cancel_pend(void);
 static int bullshit(void); /* for the funsies */
+static void handle_type(void);
 
 int cursor_row;
 int cursor_col;
@@ -60,6 +61,8 @@ void editor_run(void) {
         editor_refresh_screen();
         char key;
         int result = editor_read_key(&key);
+
+        prompt_clear();
 
         if(result == -1) {
             continue;
@@ -95,6 +98,7 @@ void editor_run(void) {
                 break;
             case CTRL_X:
                 pend();
+                prompt_message("pend");
                 break;
             case CTRL_C:
                 if(handle_exit())
@@ -102,6 +106,7 @@ void editor_run(void) {
                 break;
             case CTRL_G:
                 cancel_pend();
+                prompt_message("cancel pend");
                 break;
             case CTRL_S:
                 handle_save();
@@ -109,7 +114,7 @@ void editor_run(void) {
         }
         /* typing */
         if(key >= 32 && key <= 126) {
-            cancel_pend(); /* cancel pend when typing normally into editor */
+            cancel_pend(); /* typing normally */
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
         }
