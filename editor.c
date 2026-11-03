@@ -110,8 +110,9 @@ void editor_run(void) {
                 prompt_message("cancel pend");
                 break;
             case CTRL_S:
-                handle_save();
-                break;
+                if(command_pending)
+                    handle_save();
+                    break;
         }
         /* typing */
         if(key >= 32 && key <= 126) {
@@ -440,6 +441,9 @@ void handle_ctrl_b(void) {
 
 void handle_save(void) {
     bullshit();
+    cancel_pend(); /* just do this so we dont keep pending after.
+                    fix in prompt.c later; i don't want to expose
+                    cancel_pend in editor.h, though. */
 }
 
 void handle_enter(void) {
