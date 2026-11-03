@@ -111,7 +111,7 @@ void editor_run(void) {
             case CTRL_S:
                 if(command_pending)
                     handle_save();
-                    break;
+                break;
         }
         /* typing */
         if(key >= 32 && key <= 126) {
@@ -439,7 +439,14 @@ void handle_ctrl_b(void) {
 }
 
 void handle_save(void) {
-    bullshit();
+    if(!current_filename) {
+        bullshit();
+        prompt_message("file saved");
+    } else {
+        save_file(current_filename);
+        editor_update_saved_state();
+        prompt_message("file saved");
+    }
     cancel_pend(); /* just do this so we dont keep pending after.
                     fix in prompt.c later; i don't want to expose
                     cancel_pend in editor.h, though. */
