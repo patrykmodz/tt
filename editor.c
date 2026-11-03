@@ -11,6 +11,7 @@
 #include "editor.h"
 #include "file.h"
 #include "prompt.h"
+#include "statusbar.h"
 
 struct termios settings;
 struct termios original_settings;
@@ -199,6 +200,7 @@ void editor_refresh_screen(void) {
         col_offset = 0;
 
     editor_draw_rows();
+    statusbar_draw();
     prompt_refresh();
 
     printf("\x1b[%d;%dH",
