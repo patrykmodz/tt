@@ -11,6 +11,7 @@
 #include "editor.h"
 #include "file.h"
 #include "prompt.h"
+#include "statusbar.h"
 
 struct termios settings;
 struct termios original_settings;
@@ -26,7 +27,6 @@ static void editor_draw_rows(void);
 
 static void editor_row_delete_char(struct editor_row *row, int at);
 static void editor_handle_resize(int signal);
-static int editor_is_modified(void);
 static void editor_free_saved_state(void);
 
 /* key handling */
@@ -42,6 +42,7 @@ static int handle_exit(void);
 static void pend(void);
 static void cancel_pend(void);
 static int bullshit(void); /* for the funsies */
+static void handle_type(void);
 
 int cursor_row;
 int cursor_col;
@@ -60,6 +61,8 @@ void editor_run(void) {
         editor_refresh_screen();
         char key;
         int result = editor_read_key(&key);
+
+        prompt_clear();
 
         if(result == -1) {
             continue;
@@ -95,6 +98,7 @@ void editor_run(void) {
                 break;
             case CTRL_X:
                 pend();
+                prompt_message("pend");
                 break;
             case CTRL_C:
                 if(handle_exit())
@@ -102,13 +106,16 @@ void editor_run(void) {
                 break;
             case CTRL_G:
                 cancel_pend();
+                prompt_message("cancel pend");
                 break;
             case CTRL_S:
-                handle_save();
-                break;
+                if(command_pending)
+                    handle_save();
+                    break;
         }
         /* typing */
         if(key >= 32 && key <= 126) {
+            cancel_pend(); /* typing normally */
             editor_row_insert_char(&rows[cursor_row], cursor_col, key);
             cursor_col++;
         }
@@ -168,7 +175,7 @@ void editor_refresh_screen(void) {
 
     /* vertical scrolling */
     int v_margin = 8; /* 8 lines */
-    int visible_rows = window.ws_row - 1;
+    int visible_rows = window.ws_row - 2;
 
     if(cursor_row < row_offset + v_margin)
         row_offset = cursor_row - v_margin;
@@ -193,6 +200,8 @@ void editor_refresh_screen(void) {
         col_offset = 0;
 
     editor_draw_rows();
+    statusbar_draw();
+    prompt_refresh();
 
     printf("\x1b[%d;%dH",
         cursor_row - row_offset + 1,
@@ -210,7 +219,7 @@ void editor_clear_screen(void) {
 }
 
 void editor_draw_rows(void) {
-    for(int i = 0; i < window.ws_row; i++) {
+    for(int i = 0; i < window.ws_row-2; i++) {
         int file_row = i + row_offset;
 
         if(file_row < num_rows) {
@@ -228,7 +237,7 @@ void editor_draw_rows(void) {
             printf("~");
         }
 
-        if(i < window.ws_row - 1)
+        if(i < window.ws_row - 3)
             printf("\r\n");
     }
 }
@@ -431,6 +440,9 @@ void handle_ctrl_b(void) {
 
 void handle_save(void) {
     bullshit();
+    cancel_pend(); /* just do this so we dont keep pending after.
+                    fix in prompt.c later; i don't want to expose
+                    cancel_pend in editor.h, though. */
 }
 
 void handle_enter(void) {

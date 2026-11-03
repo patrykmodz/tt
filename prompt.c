@@ -1,17 +1,23 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <string.h>
+#include <time.h>
 
 #include "prompt.h"
 #define CTRL_G 7 /* avoid adding editor.h here */
 
-void buffer_add_char(char key);
-void buffer_init(void);
-void get_terminal_dimension(void);
-void prompt_draw(const char *message);
-char *prompt_parse(char *input);
+static void buffer_add_char(char key);
+static void buffer_init(void);
+static void get_terminal_dimension(void);
+static char *prompt_parse(char *input);
+static void prompt_draw(const char *message);
+static char *prompt_run(const char *message);
+
+static char *prompt_message_text; /* owns a copy of the message */
+static int prompt_message_active; /* tells us whether there's a message to display */
 
 static char *prompt_buffer;
 static size_t prompt_size;
@@ -29,6 +35,7 @@ char *prompt_run(const char *message) {
         /* check if cancelled */
         if(key == CTRL_G) {
             free(prompt_buffer);
+            prompt_message("cancel pend");
             prompt_buffer = NULL;
             return NULL;
         }
@@ -99,4 +106,43 @@ char *prompt_parse(char *input) {
     }
 
     return input;
+}
+
+void prompt_message(const char *message) {
+    /* allocate a copy of the message */
+    char *new_message = strdup(message);
+    if(!new_message) {
+        return;
+    }
+    /* replace the previous message */
+    free(prompt_message_text);
+    prompt_message_text = new_message;
+    /* activate the message */
+    prompt_message_active = 1;
+}
+
+void prompt_refresh(void) {
+    /* nothing to display */
+    if(!prompt_message_active)
+        return;
+
+    /* draw the message on the bottom row */
+    get_terminal_dimension();
+    printf("\x1b[%d;1H", window.ws_row);
+    printf("\x1b[2K");
+    printf("%s", prompt_message_text);
+}
+
+void prompt_clear(void) {
+    /* free the stored message */
+    free(prompt_message_text);
+    prompt_message_text = NULL;
+
+    /* deactivate the message */
+    prompt_message_active = 0;
+
+    /* clear the bottom row */
+    get_terminal_dimension();
+    printf("\x1b[%d;1H", window.ws_row);
+    printf("\x1b[2K");
 }
