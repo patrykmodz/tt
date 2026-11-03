@@ -514,8 +514,15 @@ static int handle_exit(void) {
     if(strcmp(input, "y") == 0) {
         free(input);
 
-        if(!bullshit())
-            return 0;
+        if(!current_filename) {
+            if(!bullshit()) {
+                return 0;
+            }
+        } else {
+            if(save_file(current_filename) != 0) {
+                return 0;
+            }
+        }
     } else if(strcmp(input, "n") == 0) {
         free(input);
     } else {
