@@ -22,7 +22,8 @@ void statusbar_draw(void) {
     if(!current_filename) {
         printf("[newfile]");
     } else {
-        printf("%s", current_filename);
+        const char *slash = strrchr(current_filename, '/');
+        printf("%s", slash ? slash + 1 : current_filename);
     }
     /* modified */
     if(editor_is_modified()) {
