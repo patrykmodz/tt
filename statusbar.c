@@ -26,10 +26,16 @@ void statusbar_draw(void) {
     }
     /* modified */
     if(editor_is_modified()) {
-        printf(" [+]");
+        printf(" [+] ");
     } else {
         printf(" "); /* just print a space */
     }
+    /* line-column */
+    printf("(");
+    printf("%d", cursor_row+1);
+    printf(",");
+    printf("%d", cursor_col+1);
+    printf(")");
 
     printf("\x1b[K"); /* clears from the current cursor position to the end of the line
                          filling the remaining space with the white background. */
